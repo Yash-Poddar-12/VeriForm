@@ -66,6 +66,19 @@ async def detect_fields(page: object, run_id: str) -> list[FieldSchema]:
             const aria = element.getAttribute("aria-label");
             return aria ? aria.trim() : null;
           };
+          const inferContextText = (element) => {
+            if (!element) return null;
+            const describedBy = element.getAttribute("aria-describedby");
+            if (!describedBy) return null;
+            const parts = describedBy
+              .split(/\\s+/)
+              .map((id) => document.getElementById(id))
+              .filter((node) => node && node.textContent)
+              .map((node) => node.textContent.trim())
+              .filter(Boolean);
+            if (parts.length > 0) return parts.join(" ");
+            return null;
+          };
           const controls = Array.from(
             document.querySelectorAll("form input, form textarea, form select")
           );
@@ -85,6 +98,8 @@ async def detect_fields(page: object, run_id: str) -> list[FieldSchema]:
                 dom_id: el.id || null,
                 type: tag === "input" ? inputType : tag,
                 label: inferLabel(el),
+                placeholder: el.getAttribute("placeholder"),
+                context_text: inferContextText(el),
                 required: el.hasAttribute("required"),
                 min_length: parseOptionalInt(el.getAttribute("minlength")),
                 max_length: parseOptionalInt(el.getAttribute("maxlength")),
@@ -108,6 +123,8 @@ async def detect_fields(page: object, run_id: str) -> list[FieldSchema]:
                 field_id=f"field_{index:03d}",
                 run_id=run_id,
                 label=_as_optional_str(control.get("label")),
+                placeholder=_as_optional_str(control.get("placeholder")),
+                context_text=_as_optional_str(control.get("context_text")),
                 name=name,
                 dom_id=_as_optional_str(control.get("dom_id")),
                 type=str(control.get("type") or "text"),

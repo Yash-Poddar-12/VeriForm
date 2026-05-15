@@ -6,6 +6,14 @@ Shared pytest fixtures for the VeriForm test suite.
 
 from __future__ import annotations
 
+import asyncio
+import sys
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()
+    )
+
 import tempfile
 from pathlib import Path
 

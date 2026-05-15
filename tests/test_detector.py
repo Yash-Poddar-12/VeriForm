@@ -13,6 +13,8 @@ async def test_detect_fields_extracts_form_controls() -> None:
                 "dom_id": "mobile",
                 "type": "text",
                 "label": "Mobile Number",
+                "placeholder": "10-digit number",
+                "context_text": "Include country code if required",
                 "required": True,
                 "min_length": 10,
                 "max_length": 10,
@@ -40,5 +42,7 @@ async def test_detect_fields_extracts_form_controls() -> None:
     assert len(fields) == 2
     assert fields[0].field_id == "field_001"
     assert fields[0].name == "mobile_number"
+    assert fields[0].placeholder == "10-digit number"
+    assert fields[0].context_text == "Include country code if required"
     assert fields[0].max_length == 10
     assert fields[1].type == "date"

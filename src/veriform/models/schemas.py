@@ -24,6 +24,10 @@ class FieldSchema(BaseModel):
     field_id: str = Field(..., description="Unique internal ID, e.g. 'field_001'")
     run_id: str = Field(..., description="Parent run session ID")
     label: Optional[str] = Field(None, description="Associated <label> text")
+    placeholder: Optional[str] = Field(None, description="Placeholder hint text")
+    context_text: Optional[str] = Field(
+        None, description="Nearby descriptive/helper text around the field"
+    )
     name: str = Field(..., description="HTML name attribute")
     dom_id: Optional[str] = Field(None, description="HTML id attribute")
     type: str = Field(..., description="Input type: text, email, number, textarea")
@@ -87,6 +91,7 @@ class CombinationPlanSchema(BaseModel):
 class TestCaseSchema(BaseModel):
     """A single executable test scenario targeting one form field."""
 
+    __test__ = False
     test_case_id: str = Field(..., description="Unique identifier, e.g. 'tc_102'")
     field_id: str = Field(..., description="Reference to FieldSchema.field_id")
     run_id: str = Field(..., description="Parent run session ID")

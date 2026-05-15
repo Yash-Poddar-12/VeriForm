@@ -7,6 +7,8 @@ from typing import Sequence
 from veriform.ai_inference.confidence_ranker import rank_candidates_by_priority
 from veriform.models.schemas import CandidateInputSchema, CombinationPlanSchema
 
+MAX_PLANNER_COMBINATIONS = 40
+
 
 def create_combination_plan(
     run_id: str,
@@ -14,14 +16,15 @@ def create_combination_plan(
     max_combinations: int = 25,
 ) -> CombinationPlanSchema:
     """Create a deterministic, bounded execution plan from unique candidates."""
+    bounded_max = max(1, min(max_combinations, MAX_PLANNER_COMBINATIONS))
     deduped = _dedupe_candidates(candidates)
     ranked = rank_candidates_by_priority(deduped)
-    selected = _select_with_field_coverage(ranked, max_combinations=max_combinations)
+    selected = _select_with_field_coverage(ranked, max_combinations=bounded_max)
     return CombinationPlanSchema(
         plan_id=f"plan_{run_id}",
         run_id=run_id,
         strategy="single-page-deterministic-priority",
-        max_combinations=max_combinations,
+        max_combinations=bounded_max,
         selected_candidates=selected,
     )
 

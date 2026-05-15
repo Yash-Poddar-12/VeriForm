@@ -12,22 +12,42 @@ from veriform.orchestrator.orchestrator import run, run_single_page
 from fake_playwright import FakePage
 
 
+async def _no_managed_page():
+    return None, None
+
+
 class TestOrchestratorFlow:
-    async def test_run_returns_run_summary_schema(self):
+    async def test_run_returns_run_summary_schema(self, monkeypatch):
+        monkeypatch.setattr(
+            "veriform.orchestrator.orchestrator._try_create_managed_page",
+            _no_managed_page,
+        )
         summary = await run("https://example.com/form")
         assert isinstance(summary, RunSummarySchema)
 
-    async def test_run_id_is_non_empty(self):
+    async def test_run_id_is_non_empty(self, monkeypatch):
+        monkeypatch.setattr(
+            "veriform.orchestrator.orchestrator._try_create_managed_page",
+            _no_managed_page,
+        )
         summary = await run("https://example.com/form")
         assert summary.run_id
         assert len(summary.run_id) > 0
 
-    async def test_target_url_is_preserved(self):
+    async def test_target_url_is_preserved(self, monkeypatch):
+        monkeypatch.setattr(
+            "veriform.orchestrator.orchestrator._try_create_managed_page",
+            _no_managed_page,
+        )
         url = "https://example.com/test-form"
         summary = await run(url)
         assert summary.target_url == url
 
-    async def test_timestamp_is_set(self):
+    async def test_timestamp_is_set(self, monkeypatch):
+        monkeypatch.setattr(
+            "veriform.orchestrator.orchestrator._try_create_managed_page",
+            _no_managed_page,
+        )
         summary = await run("https://example.com/form")
         assert summary.timestamp is not None
 

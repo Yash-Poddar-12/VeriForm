@@ -101,3 +101,23 @@ def test_create_combination_plan_prefers_field_coverage_under_cap() -> None:
         "field-1-best",
         "field-2-best",
     ]
+
+
+def test_create_combination_plan_enforces_global_hard_cap() -> None:
+    candidates = [
+        CandidateInputSchema(
+            candidate_id=f"cand-{index:03d}",
+            run_id="run-1",
+            field_id=f"field_{index:03d}",
+            input_value=f"value-{index}",
+            category="valid",
+            expected_outcome="accept",
+            priority_score=0.9,
+        )
+        for index in range(1, 80)
+    ]
+
+    plan = create_combination_plan(run_id="run-1", candidates=candidates, max_combinations=999)
+
+    assert plan.max_combinations == 40
+    assert len(plan.selected_candidates) == 40

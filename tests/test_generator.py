@@ -169,3 +169,105 @@ def test_candidate_generation_handles_numeric_and_date_boundaries() -> None:
     assert "not-a-number" in numeric_values
     assert "1990-01-01" in date_values
     assert "1990-02-30" in date_values
+
+
+def test_candidate_generation_is_domain_agnostic_for_common_form_fields() -> None:
+    fields = [
+        FieldSchema(field_id="field_001", run_id="run-1", name="postal_code", type="text"),
+        FieldSchema(field_id="field_002", run_id="run-1", name="billing_amount", type="number"),
+        FieldSchema(field_id="field_003", run_id="run-1", name="country", type="select"),
+        FieldSchema(field_id="field_004", run_id="run-1", name="accept_terms", type="checkbox"),
+    ]
+    merged = {
+        "field_001": [
+            InferredConstraintSchema(
+                constraint_id="c1",
+                run_id="run-1",
+                field_id="field_001",
+                semantic_type="postal_code",
+                likely_format="zip-or-postal-code",
+                confidence=ConfidenceScoreSchema(score=0.8, source="deterministic_hint"),
+            )
+        ],
+        "field_002": [
+            InferredConstraintSchema(
+                constraint_id="c2",
+                run_id="run-1",
+                field_id="field_002",
+                semantic_type="amount",
+                likely_format="decimal-number",
+                confidence=ConfidenceScoreSchema(score=0.8, source="deterministic_hint"),
+            )
+        ],
+        "field_003": [
+            InferredConstraintSchema(
+                constraint_id="c3",
+                run_id="run-1",
+                field_id="field_003",
+                semantic_type="select_option",
+                likely_format="predefined-option",
+                confidence=ConfidenceScoreSchema(score=0.8, source="deterministic_hint"),
+            )
+        ],
+        "field_004": [
+            InferredConstraintSchema(
+                constraint_id="c4",
+                run_id="run-1",
+                field_id="field_004",
+                semantic_type="boolean_choice",
+                likely_format="true-or-false",
+                confidence=ConfidenceScoreSchema(score=0.8, source="deterministic_hint"),
+            )
+        ],
+    }
+
+    candidates = build_candidate_inputs(fields=fields, merged_constraints=merged)
+    by_field = {
+        field_id: [candidate for candidate in candidates if candidate.field_id == field_id]
+        for field_id in merged
+    }
+
+    assert "90210" in {str(candidate.input_value) for candidate in by_field["field_001"]}
+    assert any(candidate.input_value == 100.5 for candidate in by_field["field_002"])
+    assert "option_1" in {str(candidate.input_value) for candidate in by_field["field_003"]}
+    assert {True, False}.issubset({candidate.input_value for candidate in by_field["field_004"]})
+
+
+def test_candidate_generation_caps_per_field_and_stays_bounded() -> None:
+    field = FieldSchema(
+        field_id="field_001",
+        run_id="run-1",
+        name="identifier",
+        type="text",
+        required=True,
+        min_length=3,
+        max_length=40,
+        pattern="[A-Za-z0-9]{3,40}",
+    )
+    candidates = build_candidate_inputs(fields=[field], merged_constraints={"field_001": []})
+
+    assert len(candidates) <= 12
+    categories = {candidate.category for candidate in candidates}
+    assert {"valid", "boundary", "malformed", "suspicious", "empty", "whitespace"} <= categories
+
+
+def test_candidate_generation_supports_structured_identifiers() -> None:
+    field = FieldSchema(field_id="field_001", run_id="run-1", name="gov_identifier", type="text")
+    merged = {
+        "field_001": [
+            InferredConstraintSchema(
+                constraint_id="c1",
+                run_id="run-1",
+                field_id="field_001",
+                semantic_type="application_reference_number",
+                likely_format="pan-india-alpha5-digit4-alpha1",
+                confidence=ConfidenceScoreSchema(score=0.9, source="deterministic_hint"),
+            )
+        ]
+    }
+
+    candidates = build_candidate_inputs(fields=[field], merged_constraints=merged)
+    values = {str(candidate.input_value) for candidate in candidates}
+
+    assert "ABCDE1234F" in values
+    assert "ABCD12345F" in values
