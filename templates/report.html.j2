@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VeriForm Report – {{ summary.run_id }}</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; color: #222; }
+    h1 { color: #1a1a2e; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem 1rem; text-align: left; }
+    th { background: #f0f0f0; }
+    .pass { color: #2d6a2d; font-weight: bold; }
+    .fail { color: #a00; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>VeriForm Run Report</h1>
+  <p><strong>Run ID:</strong> {{ summary.run_id }}</p>
+  <p><strong>URL:</strong> {{ summary.target_url }}</p>
+  <p><strong>Timestamp:</strong> {{ summary.timestamp }}</p>
+
+  <h2>Summary</h2>
+  <table>
+    <tr><th>Fields Detected</th><td>{{ summary.metrics.total_fields_detected }}</td></tr>
+    <tr><th>Tests Executed</th><td>{{ summary.metrics.total_tests_executed }}</td></tr>
+    <tr><th>Passed</th><td class="pass">{{ summary.metrics.total_passed }}</td></tr>
+    <tr><th>Failed</th><td class="fail">{{ summary.metrics.total_failed }}</td></tr>
+    <tr><th>Pass Rate</th><td>{{ summary.metrics.pass_rate_percentage }}%</td></tr>
+  </table>
+
+  <h2>Test Results</h2>
+  {% if results %}
+  <table>
+    <thead>
+      <tr>
+        <th>Test Case ID</th>
+        <th>Observed</th>
+        <th>Status</th>
+        <th>Duration (ms)</th>
+        <th>Validation Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td>{{ r.test_case_id }}</td>
+        <td>{{ r.observed_outcome }}</td>
+        <td class="{{ r.status }}">{{ r.status.upper() }}</td>
+        <td>{{ r.execution_duration_ms }}</td>
+        <td>{{ r.validation_message or "–" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p><em>No results recorded for this run.</em></p>
+  {% endif %}
+</body>
+</html>
