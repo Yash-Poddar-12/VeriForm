@@ -9,6 +9,7 @@ from __future__ import annotations
 from veriform.models.schemas import RunSummarySchema
 from veriform.orchestrator.orchestrator import run, run_single_page
 
+# pyrefly: ignore [missing-import]
 from fake_playwright import FakePage
 
 

@@ -63,3 +63,4 @@ def test_combination_plan_schema_contract() -> None:
         selected_candidates=[candidate],
     )
     assert plan.max_combinations == 10
+    

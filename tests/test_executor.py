@@ -3,6 +3,7 @@ from __future__ import annotations
 from veriform.executor.executor import execute
 from veriform.models.schemas import TestCaseSchema
 
+# pyrefly: ignore [missing-import]
 from fake_playwright import FakePage
 
 
