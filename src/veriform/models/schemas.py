@@ -37,6 +37,20 @@ class FieldSchema(BaseModel):
     pattern: Optional[str] = Field(None, description="HTML pattern attribute (regex)")
     min_val: Optional[float] = Field(None, description="Min value for numeric/date")
     max_val: Optional[float] = Field(None, description="Max value for numeric/date")
+    
+    # New Phase 2 Discovery attributes (All Optional/Defaulted for backward compatibility)
+    autocomplete: Optional[str] = Field(None, description="HTML autocomplete attribute")
+    inputmode: Optional[str] = Field(None, description="HTML inputmode attribute")
+    readonly: bool = Field(False, description="Is the field readonly")
+    disabled: bool = Field(False, description="Is the field disabled")
+    aria_invalid: Optional[str] = Field(None, description="aria-invalid attribute")
+    aria_required: Optional[str] = Field(None, description="aria-required attribute")
+    title: Optional[str] = Field(None, description="HTML title attribute")
+    validation_message_containers: list[str] = Field(default_factory=list, description="Selectors/Text of adjacent error containers")
+    
+    semantic_type: Optional[str] = Field(None, description="Deterministically classified semantic type (e.g., 'phone')")
+    semantic_confidence: float = Field(0.0, ge=0.0, le=1.0, description="Confidence of the semantic classification")
+    matched_signals: list[str] = Field(default_factory=list, description="Signals that led to semantic classification")
 
 
 class ConfidenceScoreSchema(BaseModel):

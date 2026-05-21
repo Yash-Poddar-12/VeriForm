@@ -14,10 +14,13 @@ class FakePage:
         self._last_field_name: str | None = None
         self._last_value: str = ""
 
-    async def goto(self, url: str, timeout: int | None = None) -> None:
-        _ = timeout
+    async def goto(self, url: str, timeout: int = 30000, wait_until: str = "load", **kwargs) -> None:
+        _ = (timeout, wait_until, kwargs)
         self.url = url
         self.validation_message = None
+
+    async def wait_for_timeout(self, timeout: int) -> None:
+        pass
 
     async def evaluate(self, script: str):
         _ = script
