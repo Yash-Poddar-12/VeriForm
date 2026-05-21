@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - veriform_data:/app/data
+      - veriform_artifacts:/app/artifacts
+    environment:
+      - VERIFORM_ENV=production
+      - VERIFORM_DATABASE_URL=sqlite+aiosqlite:////app/data/veriform.db
+      - VERIFORM_ARTIFACTS_DIR=/app/artifacts
+      - VERIFORM_MAX_CONCURRENT_RUNS=4
+    restart: unless-stopped
+
+volumes:
+  veriform_data:
+  veriform_artifacts:

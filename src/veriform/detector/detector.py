@@ -80,7 +80,7 @@ async def detect_fields(page: object, run_id: str) -> list[FieldSchema]:
             return null;
           };
           const controls = Array.from(
-            document.querySelectorAll("form input, form textarea, form select")
+            document.querySelectorAll("input, textarea, select")
           );
           return controls
             .filter((el) => {

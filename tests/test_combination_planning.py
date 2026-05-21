@@ -1,13 +1,16 @@
+from __future__ import annotations
+import pytest
 """Tests for candidate generation and deterministic combination planning."""
 
-from __future__ import annotations
 
+from veriform.constraint_ir.adapters.translator import translate_to_profile
 from veriform.generator.candidate_generator import build_candidate_inputs
 from veriform.generator.combination_planner import create_combination_plan
 from veriform.models.schemas import CandidateInputSchema, FieldSchema
 
 
-def test_build_candidate_inputs_creates_required_empty_case() -> None:
+@pytest.mark.asyncio
+async def test_build_candidate_inputs_creates_required_empty_case() -> None:
     fields = [
         FieldSchema(
             field_id="field_001",
@@ -17,18 +20,30 @@ def test_build_candidate_inputs_creates_required_empty_case() -> None:
             required=True,
         )
     ]
-
-    candidates = build_candidate_inputs(fields=fields, merged_constraints={"field_001": []})
+    from veriform.models.schemas import InferredConstraintSchema, ConfidenceScoreSchema
+    constraint = InferredConstraintSchema(
+        constraint_id="c1",
+        run_id="run-1",
+        field_id="field_001",
+        semantic_type="email",
+        likely_format="",
+        confidence=ConfidenceScoreSchema(score=0.9, source="deterministic_hint")
+    )
+    profiles = [translate_to_profile(fields[0], constraint)]
+    candidates = await build_candidate_inputs(fields=fields, constraint_profiles=profiles)
 
     categories = {candidate.category for candidate in candidates}
     assert {"valid", "malformed", "invalid", "empty", "whitespace", "suspicious"} <= categories
 
 
-def test_create_combination_plan_dedupes_and_caps() -> None:
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_create_combination_plan_dedupes_and_caps() -> None:
     fields = [
         FieldSchema(field_id="field_001", run_id="run-1", name="email", type="email")
     ]
-    candidates = build_candidate_inputs(fields=fields, merged_constraints={"field_001": []})
+    profiles = [translate_to_profile(fields[0])]
+    candidates = await build_candidate_inputs(fields=fields, constraint_profiles=profiles)
     duplicated = candidates + candidates
 
     plan = create_combination_plan(run_id="run-1", candidates=duplicated, max_combinations=1)
@@ -37,7 +52,8 @@ def test_create_combination_plan_dedupes_and_caps() -> None:
     assert plan.strategy == "single-page-deterministic-priority"
 
 
-def test_create_combination_plan_keeps_highest_priority_duplicate() -> None:
+@pytest.mark.asyncio
+async def test_create_combination_plan_keeps_highest_priority_duplicate() -> None:
     candidates = [
         CandidateInputSchema(
             candidate_id="cand-low",
@@ -64,7 +80,8 @@ def test_create_combination_plan_keeps_highest_priority_duplicate() -> None:
     assert [candidate.candidate_id for candidate in plan.selected_candidates] == ["cand-high"]
 
 
-def test_create_combination_plan_prefers_field_coverage_under_cap() -> None:
+@pytest.mark.asyncio
+async def test_create_combination_plan_prefers_field_coverage_under_cap() -> None:
     candidates = [
         CandidateInputSchema(
             candidate_id="field-1-best",
@@ -103,7 +120,8 @@ def test_create_combination_plan_prefers_field_coverage_under_cap() -> None:
     ]
 
 
-def test_create_combination_plan_enforces_global_hard_cap() -> None:
+@pytest.mark.asyncio
+async def test_create_combination_plan_enforces_global_hard_cap() -> None:
     candidates = [
         CandidateInputSchema(
             candidate_id=f"cand-{index:03d}",

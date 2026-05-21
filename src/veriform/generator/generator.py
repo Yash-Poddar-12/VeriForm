@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+from veriform.constraint_ir.models.profile import ConstraintProfile
 from veriform.generator.candidate_generator import build_candidate_inputs
 from veriform.generator.combination_planner import create_combination_plan
 from veriform.models.schemas import FieldSchema, InferredConstraintSchema, TestCaseSchema
@@ -18,9 +19,9 @@ from veriform.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def generate(
+async def generate(
     fields: list[FieldSchema],
-    merged_constraints: Mapping[str, Sequence[InferredConstraintSchema]] | None = None,
+    constraint_profiles: Sequence[ConstraintProfile] | None = None,
     max_combinations: int = 25,
 ) -> list[TestCaseSchema]:
     """Generate deterministic test cases for each detected field.
@@ -32,8 +33,8 @@ def generate(
         logger.warning("generate: no fields provided - returning empty list")
         return []
 
-    constraints = merged_constraints or {field.field_id: [] for field in fields}
-    candidates = build_candidate_inputs(fields=fields, merged_constraints=constraints)
+    profiles = constraint_profiles or []
+    candidates = await build_candidate_inputs(fields=fields, constraint_profiles=profiles)
     plan = create_combination_plan(
         run_id=fields[0].run_id,
         candidates=candidates,

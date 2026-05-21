@@ -1,4 +1,4 @@
-# Python
+# Python Cache and Bytecode
 __pycache__/
 *.py[cod]
 *.pyo
@@ -16,25 +16,60 @@ venv/
 env/
 .env
 
-# Pytest / Coverage
+# Environment examples (Keep)
+!.env.example
+
+# Pytest / Coverage / Types
 .pytest_cache/
+.pytest_tmp/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Playwright
+# Playwright & Browser binaries
 test-results/
 playwright-report/
+.playwright/
+playwright-binaries/
+ms-playwright/
 
-# Reports output (generated at runtime – keep folder, ignore contents)
-reports/*
-!reports/.gitkeep
+# VeriForm Outputs & Artifacts
+reports/
+traces/
+screenshots/
+artifacts/
 
-# IDE
+# Database / SQLite
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.s3db
+*.sl3
+
+# Alembic
+alembic.ini.bak
+versions/*.pyc
+versions/__pycache__/
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDE & Editor
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
+*.swn
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+temp/
+tmp/

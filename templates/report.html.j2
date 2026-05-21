@@ -1,59 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VeriForm Report – {{ summary.run_id }}</title>
   <style>
-    body { font-family: sans-serif; margin: 2rem; color: #222; }
-    h1 { color: #1a1a2e; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem 1rem; text-align: left; }
-    th { background: #f0f0f0; }
-    .pass { color: #2d6a2d; font-weight: bold; }
-    .fail { color: #a00; font-weight: bold; }
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      color: #1a1d23;
+      line-height: 1.5;
+      padding: 2rem 1.5rem;
+    }
+
+    /* ── Layout containers ────────────────────────────────────────── */
+    .page { max-width: 1200px; margin: 0 auto; }
+    .section { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 1.75rem; padding: 1.5rem 1.75rem; }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    .header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+    .header h1 { font-size: 1.6rem; font-weight: 700; color: #1a1d23; }
+    .header .badge { display: inline-block; padding: .25rem .65rem; border-radius: 20px; font-size: .75rem; font-weight: 600; letter-spacing: .03em; }
+    .badge-pass  { background: #d1fae5; color: #065f46; }
+    .badge-fail  { background: #fee2e2; color: #991b1b; }
+    .badge-mixed { background: #fef3c7; color: #92400e; }
+
+    /* ── Meta bar ─────────────────────────────────────────────────── */
+    .meta { font-size: .8rem; color: #6b7280; display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.5rem; }
+    .meta span strong { color: #374151; }
+
+    /* ── Stat cards ───────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.75rem; }
+    .stat-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 1.1rem 1.25rem; text-align: center; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-card .label { font-size: .75rem; color: #6b7280; margin-top: .35rem; letter-spacing: .04em; text-transform: uppercase; }
+    .stat-card.total .value  { color: #374151; }
+    .stat-card.passed .value { color: #059669; }
+    .stat-card.failed .value { color: #dc2626; }
+    .stat-card.rate .value   { color: #2563eb; }
+
+    /* ── Section titles ───────────────────────────────────────────── */
+    h2 { font-size: 1.1rem; font-weight: 600; color: #111827; margin-bottom: 1rem; display: flex; align-items: center; gap: .5rem; }
+    h2 .icon { font-size: 1.1rem; }
+
+    /* ── Progress bar ─────────────────────────────────────────────── */
+    .progress-wrap { background: #e5e7eb; border-radius: 99px; height: 8px; overflow: hidden; margin-bottom: 1.25rem; }
+    .progress-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+    .progress-fill.high   { background: #10b981; }
+    .progress-fill.medium { background: #f59e0b; }
+    .progress-fill.low    { background: #ef4444; }
+
+    /* ── Outcome chips ────────────────────────────────────────────── */
+    .outcome-grid { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    .outcome-chip { border-radius: 99px; padding: .2rem .8rem; font-size: .75rem; font-weight: 600; }
+    .chip-accepted         { background: #d1fae5; color: #065f46; }
+    .chip-rejected         { background: #dbeafe; color: #1e40af; }
+    .chip-validation_error { background: #fef3c7; color: #92400e; }
+    .chip-timeout          { background: #fee2e2; color: #991b1b; }
+    .chip-crash            { background: #fce7f3; color: #9d174d; }
+
+    /* ── Tables ───────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    thead th { background: #f9fafb; font-weight: 600; text-align: left; padding: .55rem .75rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; color: #374151; }
+    tbody tr { border-bottom: 1px solid #f3f4f6; }
+    tbody tr:hover { background: #fafafa; }
+    td { padding: .5rem .75rem; vertical-align: top; }
+    .mono { font-family: 'Consolas', 'Courier New', monospace; font-size: .78rem; }
+
+    /* ── Verdict badges ───────────────────────────────────────────── */
+    .verdict { display: inline-block; padding: .18rem .55rem; border-radius: 4px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .verdict-pass  { background: #d1fae5; color: #065f46; }
+    .verdict-fail  { background: #fee2e2; color: #991b1b; }
+    .verdict-error { background: #fce7f3; color: #9d174d; }
+
+    /* ── Constraint section ───────────────────────────────────────── */
+    .constraint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .85rem; }
+    .constraint-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; }
+    .constraint-card .field-id { font-size: .7rem; color: #9ca3af; margin-bottom: .25rem; }
+    .constraint-card .semantic { font-size: .9rem; font-weight: 600; color: #1d4ed8; margin-bottom: .35rem; }
+    .constraint-card .format { font-size: .78rem; font-family: monospace; background: #f3f4f6; padding: .15rem .45rem; border-radius: 4px; color: #374151; word-break: break-all; }
+    .confidence-bar { margin-top: .65rem; }
+    .confidence-bar .bar-label { font-size: .68rem; color: #6b7280; display: flex; justify-content: space-between; margin-bottom: .2rem; }
+    .confidence-bar .bar-wrap { background: #e5e7eb; border-radius: 99px; height: 5px; }
+    .confidence-bar .bar-fill { height: 100%; border-radius: 99px; }
+
+    /* ── Feedback section ─────────────────────────────────────────── */
+    .feedback-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+    .feedback-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: .85rem; }
+    .feedback-card .fid { font-size: .7rem; color: #9ca3af; }
+    .feedback-card .outcomes { margin-top: .4rem; display: flex; flex-wrap: wrap; gap: .3rem; }
+
+    /* ── Empty state ──────────────────────────────────────────────── */
+    .empty { color: #9ca3af; font-size: .85rem; font-style: italic; padding: 1rem 0; }
+
+    /* ── Utility ──────────────────────────────────────────────────── */
+    .tag { display: inline-block; background: #f3f4f6; border-radius: 4px; font-size: .7rem; padding: .1rem .4rem; color: #374151; }
+    hr.divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.25rem 0; }
+    code { font-family: 'Consolas', monospace; font-size: .8rem; }
+    .text-muted { color: #9ca3af; }
   </style>
 </head>
 <body>
-  <h1>VeriForm Run Report</h1>
-  <p><strong>Run ID:</strong> {{ summary.run_id }}</p>
-  <p><strong>URL:</strong> {{ summary.target_url }}</p>
-  <p><strong>Timestamp:</strong> {{ summary.timestamp }}</p>
+<div class="page">
 
-  <h2>Summary</h2>
-  <table>
-    <tr><th>Fields Detected</th><td>{{ summary.metrics.total_fields_detected }}</td></tr>
-    <tr><th>Tests Executed</th><td>{{ summary.metrics.total_tests_executed }}</td></tr>
-    <tr><th>Passed</th><td class="pass">{{ summary.metrics.total_passed }}</td></tr>
-    <tr><th>Failed</th><td class="fail">{{ summary.metrics.total_failed }}</td></tr>
-    <tr><th>Pass Rate</th><td>{{ summary.metrics.pass_rate_percentage }}%</td></tr>
-  </table>
+  {# ── Header ────────────────────────────────────────────────────── #}
+  <div class="header">
+    <h1>🔍 VeriForm Report</h1>
+    {% if stats.pass_rate_pct >= 80 %}
+      <span class="badge badge-pass">{{ stats.pass_rate_pct }}% Pass Rate</span>
+    {% elif stats.pass_rate_pct >= 50 %}
+      <span class="badge badge-mixed">{{ stats.pass_rate_pct }}% Pass Rate</span>
+    {% else %}
+      <span class="badge badge-fail">{{ stats.pass_rate_pct }}% Pass Rate</span>
+    {% endif %}
+  </div>
 
-  <h2>Test Results</h2>
-  {% if results %}
-  <table>
-    <thead>
-      <tr>
-        <th>Test Case ID</th>
-        <th>Observed</th>
-        <th>Status</th>
-        <th>Duration (ms)</th>
-        <th>Validation Message</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in results %}
-      <tr>
-        <td>{{ r.test_case_id }}</td>
-        <td>{{ r.observed_outcome }}</td>
-        <td class="{{ r.status }}">{{ r.status.upper() }}</td>
-        <td>{{ r.execution_duration_ms }}</td>
-        <td>{{ r.validation_message or "–" }}</td>
-      </tr>
+  {# ── Meta bar ──────────────────────────────────────────────────── #}
+  <div class="meta">
+    <span><strong>Run ID:</strong> <code>{{ summary.run_id }}</code></span>
+    <span><strong>URL:</strong> {{ summary.target_url }}</span>
+    <span><strong>Timestamp:</strong> {{ summary.timestamp }}</span>
+    <span><strong>Fields Detected:</strong> {{ summary.metrics.total_fields_detected }}</span>
+  </div>
+
+  {# ── Stat cards ────────────────────────────────────────────────── #}
+  <div class="stat-grid">
+    <div class="stat-card total">
+      <div class="value">{{ stats.total }}</div>
+      <div class="label">Tests Run</div>
+    </div>
+    <div class="stat-card passed">
+      <div class="value">{{ stats.passed }}</div>
+      <div class="label">Passed</div>
+    </div>
+    <div class="stat-card failed">
+      <div class="value">{{ stats.failed }}</div>
+      <div class="label">Failed</div>
+    </div>
+    <div class="stat-card rate">
+      <div class="value">{{ stats.pass_rate_pct }}%</div>
+      <div class="label">Pass Rate</div>
+    </div>
+    <div class="stat-card total">
+      <div class="value">{{ constraint_summary | length }}</div>
+      <div class="label">Fields Classified</div>
+    </div>
+  </div>
+
+  {# ── Pass rate progress bar ────────────────────────────────────── #}
+  <div class="section">
+    <h2><span class="icon">📊</span> Pass Rate</h2>
+    <div class="progress-wrap">
+      {% if stats.pass_rate_pct >= 80 %}
+        <div class="progress-fill high" style="width: {{ stats.pass_rate_pct }}%;"></div>
+      {% elif stats.pass_rate_pct >= 50 %}
+        <div class="progress-fill medium" style="width: {{ stats.pass_rate_pct }}%;"></div>
+      {% else %}
+        <div class="progress-fill low" style="width: {{ stats.pass_rate_pct }}%;"></div>
+      {% endif %}
+    </div>
+
+    {# Outcome distribution chips #}
+    <div class="outcome-grid">
+      {% for outcome, items in by_outcome.items() %}
+        <span class="outcome-chip chip-{{ outcome }}">
+          {{ outcome }}: {{ items | length }}
+        </span>
       {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p><em>No results recorded for this run.</em></p>
+    </div>
+  </div>
+
+  {# ── Constraint summary ────────────────────────────────────────── #}
+  {% if constraint_summary %}
+  <div class="section">
+    <h2><span class="icon">🧩</span> Inferred Constraints</h2>
+    <div class="constraint-grid">
+      {% for field_id, c in constraint_summary.items() %}
+        <div class="constraint-card">
+          <div class="field-id">{{ field_id }}</div>
+          <div class="semantic">{{ c.semantic_type }}</div>
+          {% if c.likely_format %}
+            <div class="format">{{ c.likely_format }}</div>
+          {% endif %}
+          <div class="confidence-bar">
+            <div class="bar-label">
+              <span>Confidence</span>
+              <span>{{ (c.confidence_score * 100) | round(0) | int }}%</span>
+            </div>
+            <div class="bar-wrap">
+              <div class="bar-fill"
+                   style="width: {{ (c.confidence_score * 100) | round(0) | int }}%;
+                          background: {% if c.confidence_score >= 0.8 %}#10b981{% elif c.confidence_score >= 0.6 %}#f59e0b{% else %}#ef4444{% endif %};">
+              </div>
+            </div>
+          </div>
+          {% if c.confidence_source %}
+            <div class="text-muted" style="font-size:.68rem; margin-top:.3rem;">{{ c.confidence_source }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
   {% endif %}
+
+  {# ── Failures grouped ─────────────────────────────────────────── #}
+  {% if grouped_results.fail %}
+  <div class="section">
+    <h2><span class="icon">❌</span> Failures ({{ grouped_results.fail | length }})</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Test Case ID</th>
+            <th>Observed</th>
+            <th>Expected</th>
+            <th>Validation Message</th>
+            <th>Duration (ms)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in grouped_results.fail %}
+          <tr>
+            <td class="mono">{{ r.test_case_id }}</td>
+            <td><span class="outcome-chip chip-{{ r.observed_outcome }}">{{ r.observed_outcome }}</span></td>
+            <td class="tag">{{ r.status }}</td>
+            <td>{{ r.validation_message or '–' }}</td>
+            <td class="text-muted">{{ r.execution_duration_ms }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Full results table ────────────────────────────────────────── #}
+  <div class="section">
+    <h2><span class="icon">📋</span> All Results</h2>
+    {% if results %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Test Case</th>
+            <th>Observed</th>
+            <th>Verdict</th>
+            <th>Duration (ms)</th>
+            <th>Validation Message</th>
+            <th>Screenshot</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+          <tr>
+            <td class="mono" style="font-size:.72rem; max-width:180px; word-break:break-all;">{{ r.test_case_id }}</td>
+            <td><span class="outcome-chip chip-{{ r.observed_outcome }}">{{ r.observed_outcome }}</span></td>
+            <td>
+              {% if r.status == 'pass' %}
+                <span class="verdict verdict-pass">pass</span>
+              {% elif r.status == 'fail' %}
+                <span class="verdict verdict-fail">fail</span>
+              {% else %}
+                <span class="verdict verdict-error">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">{{ r.execution_duration_ms }}</td>
+            <td>{{ r.validation_message or '–' }}</td>
+            <td>
+              {% if r.screenshot_path %}
+                <a href="{{ r.screenshot_path }}" title="View screenshot">📷</a>
+              {% else %}
+                <span class="text-muted">–</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">No results recorded for this run.</p>
+    {% endif %}
+  </div>
+
+  {# ── Execution feedback ────────────────────────────────────────── #}
+  {% if feedback_by_field %}
+  <div class="section">
+    <h2><span class="icon">🔄</span> Execution Feedback by Field</h2>
+    <div class="feedback-grid">
+      {% for field_id, outcomes in feedback_by_field.items() %}
+        <div class="feedback-card">
+          <div class="fid">{{ field_id }}</div>
+          <div class="outcomes">
+            {% for o in outcomes %}
+              <span class="outcome-chip chip-{{ o }}">{{ o }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Footer ────────────────────────────────────────────────────── #}
+  <div style="text-align:center; color:#9ca3af; font-size:.72rem; margin-top:1rem;">
+    Generated by VeriForm &bull; Run <code>{{ summary.run_id }}</code>
+  </div>
+
+</div>
 </body>
 </html>

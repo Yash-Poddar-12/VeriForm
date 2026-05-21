@@ -122,19 +122,21 @@ class TestOrchestratorSinglePageFlow:
 
 class TestOrchestratorAPI:
     async def test_health_endpoint(self, api_client):
-        response = await api_client.get("/health")
+        response = await api_client.get("/api/v1/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
-    async def test_post_run_returns_202(self, api_client):
+    async def test_post_run_returns_202(self, api_client, monkeypatch):
+        from unittest.mock import AsyncMock
+        monkeypatch.setattr("veriform.api.routes.runs.task_queue.push", AsyncMock())
         response = await api_client.post(
-            "/runs/", json={"target_url": "https://example.com/form"}
+            "/api/v1/runs/", json={"target_url": "https://example.com/form"}
         )
         assert response.status_code == 202
         body = response.json()
-        assert "run_id" in body
-        assert "metrics" in body
+        assert "id" in body
+        assert "status" in body
 
     async def test_post_run_invalid_url_returns_422(self, api_client):
-        response = await api_client.post("/runs/", json={"target_url": "not-a-url"})
+        response = await api_client.post("/api/v1/runs/", json={"target_url": "not-a-url"})
         assert response.status_code == 422

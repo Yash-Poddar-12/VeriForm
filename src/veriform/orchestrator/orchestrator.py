@@ -4,6 +4,18 @@ Central controller for a single VeriForm test run.
 
 Deterministic execution remains the source of truth.
 AI artifacts are assistive and feed prioritization only.
+
+Pipeline stages
+---------------
+1. detect          – DOM inspection → list[FieldSchema]
+2. classify        – heuristic inference → list[InferredConstraintSchema]
+2b. build_profiles – translate → list[ConstraintProfile]  (IR layer)
+3. merge           – group/rank constraints by field
+4. generate        – candidates + combination plan → list[TestCaseSchema]
+5. execute         – browser automation → list[ResultSchema]
+6. analyze         – compare expected vs observed → updated ResultSchema list
+7. feedback        – propagate outcomes back to constraint confidence
+8. report          – write JSON + HTML artifacts
 """
 
 from __future__ import annotations
@@ -18,6 +30,8 @@ from veriform.ai_inference.field_classifier import classify_fields
 from veriform.ai_inference.provider_interface import InferenceContext
 from veriform.analyzer.analyzer import analyze
 from veriform.config import settings
+from veriform.constraint_ir.adapters.translator import translate_to_profile
+from veriform.constraint_ir.models.profile import ConstraintProfile
 from veriform.constraints.inferred_constraints import (
     apply_feedback_to_constraints,
     merge_inferred_constraints,
@@ -70,10 +84,11 @@ class CandidatePlanningInterface(Protocol):
 
 @dataclass
 class OrchestrationArtifacts:
-    """Shared state object for orchestrator lifecycle."""
+    """Shared state object for the orchestrator run lifecycle."""
 
     detected_fields: list[FieldSchema] = field(default_factory=list)
     inferred_constraints: list[InferredConstraintSchema] = field(default_factory=list)
+    constraint_profiles: list[ConstraintProfile] = field(default_factory=list)
     merged_constraints: dict[str, list[InferredConstraintSchema]] = field(default_factory=dict)
     ranked_candidates: list[CandidateInputSchema] = field(default_factory=list)
     planned_test_cases: list[TestCaseSchema] = field(default_factory=list)
@@ -122,7 +137,8 @@ async def run_single_page(
                 "No Playwright page available; returning empty summary for run %s", run_id
             )
         else:
-            await page.goto(target_url, timeout=settings.timeout_ms)
+            await page.goto(target_url, timeout=settings.timeout_ms, wait_until="networkidle")
+            await page.wait_for_timeout(3000)
 
             artifacts.detected_fields = await detect_fields(page=page, run_id=run_id)
             logger.debug("Step 1 - detected %d fields", len(artifacts.detected_fields))
@@ -141,9 +157,19 @@ async def run_single_page(
                 "Step 2 - inferred %d constraints", len(artifacts.inferred_constraints)
             )
 
-            artifacts.planned_test_cases = generate(
+            # Step 2b – translate to constraint IR profiles (ConstraintProfile).
+            # The primary constraint per field (highest confidence) drives the IR.
+            artifacts.constraint_profiles = _build_constraint_profiles(
                 fields=artifacts.detected_fields,
                 merged_constraints=artifacts.merged_constraints,
+            )
+            logger.debug(
+                "Step 2b - built %d constraint profiles", len(artifacts.constraint_profiles)
+            )
+
+            artifacts.planned_test_cases = await generate(
+                fields=artifacts.detected_fields,
+                constraint_profiles=artifacts.constraint_profiles,
             )
             logger.debug(
                 "Step 3 - planned %d test cases", len(artifacts.planned_test_cases)
@@ -259,7 +285,7 @@ def _build_execution_feedback(
     test_cases: Sequence[TestCaseSchema],
 ) -> dict[str, list[str]]:
     """Build field-level deterministic feedback from observed outcomes."""
-    field_by_case_id = {test_case.test_case_id: test_case.field_id for test_case in test_cases}
+    field_by_case_id = {tc.test_case_id: tc.field_id for tc in test_cases}
     feedback: dict[str, list[str]] = {}
     for result in results:
         field_id = field_by_case_id.get(result.test_case_id)
@@ -267,3 +293,30 @@ def _build_execution_feedback(
             continue
         feedback.setdefault(field_id, []).append(result.observed_outcome)
     return feedback
+
+
+def _build_constraint_profiles(
+    fields: Sequence[FieldSchema],
+    merged_constraints: Mapping[str, Sequence[InferredConstraintSchema]],
+) -> list[ConstraintProfile]:
+    """Translate each field into a ``ConstraintProfile`` via the IR adapter.
+
+    Picks the highest-confidence inferred constraint per field as the primary
+    driver; falls back to HTML-attribute-only translation when no constraint
+    is available.
+    """
+    profiles: list[ConstraintProfile] = []
+    for f in fields:
+        field_constraints = list(merged_constraints.get(f.field_id, []))
+        primary = (
+            max(field_constraints, key=lambda c: c.confidence.score)
+            if field_constraints
+            else None
+        )
+        try:
+            profiles.append(translate_to_profile(f, primary))
+        except Exception as exc:  # never let IR translation break the run
+            logger.warning(
+                "IR translation failed for field %s: %s", f.field_id, exc
+            )
+    return profiles

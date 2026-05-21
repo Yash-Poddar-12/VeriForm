@@ -1,13 +1,15 @@
-"""Semantic-aware candidate input generation for deterministic form exploration."""
+"""Semantic-aware candidate input generation powered by Constraint Profiles."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from datetime import date
-from typing import Mapping, Sequence, Union
+from typing import Sequence, Union
 
-from veriform.models.schemas import CandidateInputSchema, FieldSchema, InferredConstraintSchema
+from veriform.constraint_ir.enums import CharsetCategory
+from veriform.constraint_ir.models.profile import ConstraintProfile
+from veriform.models.schemas import CandidateInputSchema, FieldSchema
 
 CandidateValue = Union[str, int, float, bool]
 
@@ -23,22 +25,33 @@ class _CandidateSpec:
     weight: float
 
 
-def build_candidate_inputs(
+async def build_candidate_inputs(
     fields: Sequence[FieldSchema],
-    merged_constraints: Mapping[str, Sequence[InferredConstraintSchema]],
+    constraint_profiles: Sequence[ConstraintProfile],
 ) -> list[CandidateInputSchema]:
-    """Build deterministic candidate inputs from field metadata and constraints."""
+    """Build deterministic candidate inputs directly from IR constraint profiles."""
     candidates: list[CandidateInputSchema] = []
-    for field_index, field in enumerate(fields, start=1):
-        constraint = _primary_constraint(merged_constraints.get(field.field_id, ()))
-        semantic_type = constraint.semantic_type if constraint else _fallback_semantic_type(field)
-        likely_format = constraint.likely_format if constraint else ""
-        confidence = constraint.confidence.score if constraint else _fallback_confidence(semantic_type)
+    
+    # Map for easy lookup
+    profiles_by_id = {p.profile_id.replace("profile_", ""): p for p in constraint_profiles}
 
-        for spec_index, spec in enumerate(
-            _bounded_specs(_dedupe_specs(_candidate_specs_for(field, semantic_type, likely_format))),
-            start=1,
-        ):
+    for field_index, field in enumerate(fields, start=1):
+        profile = profiles_by_id.get(field.field_id)
+        if not profile:
+            continue
+
+        specs = _candidate_specs_for_profile(field, profile)
+        
+        # Phase 3: AI-Assisted Candidate Expansion
+        from veriform.config import settings
+        if settings.enable_ai:
+            ai_specs = await _ai_expand_candidates(field, profile)
+            specs.extend(ai_specs)
+            
+        deduped = _dedupe_specs(specs)
+        bounded = _bounded_specs(deduped)
+
+        for spec_index, spec in enumerate(bounded, start=1):
             candidates.append(
                 CandidateInputSchema(
                     candidate_id=f"{field.field_id}_cand_{field_index:03d}_{spec_index:02d}",
@@ -47,40 +60,141 @@ def build_candidate_inputs(
                     input_value=spec.input_value,
                     category=spec.category,
                     expected_outcome=spec.expected_outcome,
-                    priority_score=_priority_for(field, confidence, spec),
+                    priority_score=_priority_for(field, profile.confidence, spec),
                 )
             )
 
     return candidates
 
+async def _ai_expand_candidates(field: FieldSchema, profile: ConstraintProfile) -> list[_CandidateSpec]:
+    """Optionally generate semantic edge cases and adversarial payloads using AI."""
+    from veriform.ai.registry import get_ai_provider
+    provider = get_ai_provider()
+    
+    prompt = (
+        f"Generate 3 extreme malicious payloads and 2 semantic edge cases for an HTML form field.\n"
+        f"Field Type: {field.type}\nField Name: {field.name}\n"
+        f"Semantic Profile: {profile.semantic_type}\n"
+        "Return exactly JSON format: {\"candidates\": [{\"value\": \"val\", \"category\": \"suspicious\", \"outcome\": \"reject\"}]}"
+    )
+    
+    try:
+        res = await provider.generate(prompt=prompt, response_format={"type": "json_object"})
+        data = res.get("output", {})
+        
+        # Safe structural parsing, fail gracefully if AI hallucinated format
+        if isinstance(data, str):
+            import json
+            data = json.loads(data)
+            
+        new_specs = []
+        for c in data.get("candidates", []):
+            if "value" in c and "category" in c:
+                new_specs.append(_CandidateSpec(
+                    input_value=c["value"],
+                    category=c["category"],
+                    expected_outcome=c.get("outcome", "reject"),
+                    weight=0.9
+                ))
+        return new_specs
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("AI Candidate Expansion failed, falling back to deterministic: %s", e)
+        return []
 
-def _primary_constraint(
-    constraints: Sequence[InferredConstraintSchema],
-) -> InferredConstraintSchema | None:
-    if not constraints:
-        return None
-    return max(constraints, key=lambda item: (item.confidence.score, item.constraint_id))
 
 
-def _candidate_specs_for(
-    field: FieldSchema,
-    semantic_type: str,
-    likely_format: str,
-) -> list[_CandidateSpec]:
-    specs = _semantic_specs(semantic_type)
-    specs.extend(_regex_specs(field.pattern))
-    specs.extend(_length_specs(field))
-    specs.extend(_numeric_specs(field))
-    specs.extend(_date_specs(field, semantic_type, likely_format))
-    specs.extend(_structured_identifier_specs(likely_format))
+def _candidate_specs_for_profile(field: FieldSchema, profile: ConstraintProfile) -> list[_CandidateSpec]:
+    """Generate all possible candidate specs using the semantic type and structural IR."""
+    specs: list[_CandidateSpec] = []
+    
+    # 1. Semantic catalog (covers valid, malformed, boundary for known types)
+    specs.extend(_semantic_specs(profile.semantic_type))
+    
+    # 2. Structural bounds and exact formats
+    specs.extend(_structural_specs(profile))
+    
+    # 3. Numeric bounds (if field has min/max value)
+    specs.extend(_numeric_bounds_specs(field))
+    
+    # 4. Date specifics
+    specs.extend(_date_specs(field, profile.semantic_type))
+    
+    # 5. Required empty cases
     specs.extend(_required_specs(field))
-    specs.extend(_whitespace_specs())
+    
+    # 6. Malicious/security payloads
     specs.extend(_security_specs())
+    specs.extend(_whitespace_specs())
 
+    # Fallback to ensure at least one valid candidate
     if not any(spec.category == "valid" for spec in specs):
         specs.insert(0, _CandidateSpec(_generic_valid_value(field), "valid", "accept", 0.82))
+        
     return specs
+    
+def _structural_specs(profile: ConstraintProfile) -> list[_CandidateSpec]:
+    """Use the ConstraintProfile's segments and charsets to generate structural tests."""
+    specs: list[_CandidateSpec] = []
+    
+    # Try to generate a valid string matching all segments exactly
+    valid_parts = []
+    malformed_parts = []
+    dominant_factory = _alnum
+    
+    for seg in profile.segment_model.segments:
+        min_l = 1
+        max_l = 1
+        charset = CharsetCategory.ALPHANUMERIC
+        
+        for c in seg.constraints:
+            if c.type == "length":
+                min_l = c.min_length
+                max_l = c.max_length
+            elif c.type == "charset":
+                charset = c.category
+                
+        # Generate valid part
+        target_len = min(min_l, 20)  # Bound to reasonable
+        if charset == CharsetCategory.NUMERIC:
+            valid_parts.append(_digits(target_len))
+            malformed_parts.append(_letters(target_len) or "A")
+            dominant_factory = _digits
+        elif charset == CharsetCategory.ALPHA_UPPER:
+            valid_parts.append(_letters(target_len).upper())
+            malformed_parts.append(_digits(target_len) or "1")
+            dominant_factory = _letters
+        else:
+            valid_parts.append(_alnum(target_len))
+            malformed_parts.append("###")
 
+    sep = profile.segment_model.separator or ""
+    valid_str = sep.join(valid_parts)
+    if valid_str:
+        specs.append(_CandidateSpec(valid_str, "valid", "accept", 0.95))
+        
+    malformed_str = sep.join(malformed_parts)
+    if malformed_str:
+        specs.append(_CandidateSpec(malformed_str, "malformed", "reject", 0.88))
+
+    # Boundary specs based on total lengths
+    min_len = profile.total_min_length()
+    max_len = profile.total_max_length()
+    
+    if max_len < 500: # Don't test valid upper bound if it's implicitly 500
+        specs.append(_CandidateSpec(dominant_factory(max_len), "boundary", "accept", 0.86))
+        
+    if min_len > 0:
+        specs.append(_CandidateSpec(dominant_factory(min_len), "boundary", "accept", 0.84))
+        
+    # Invalid boundary points
+    if max_len < 500:
+        specs.append(_CandidateSpec(dominant_factory(max_len + 1), "boundary", "reject", 0.9))
+        
+    if min_len > 1:
+        specs.append(_CandidateSpec(dominant_factory(min_len - 1), "boundary", "reject", 0.88))
+        
+    return specs
 
 def _semantic_specs(semantic_type: str) -> list[_CandidateSpec]:
     catalog: dict[str, list[_CandidateSpec]] = {
@@ -97,18 +211,15 @@ def _semantic_specs(semantic_type: str) -> list[_CandidateSpec]:
         "loan_account_number": [
             _CandidateSpec("123456789012", "valid", "accept", 0.96),
             _CandidateSpec("1234567", "boundary", "reject", 0.9),
-            _CandidateSpec("12345678901234567", "boundary", "reject", 0.9),
             _CandidateSpec("12A456789012", "malformed", "reject", 0.88),
         ],
         "date_of_birth": [
             _CandidateSpec("1990-01-01", "valid", "accept", 0.95),
-            _CandidateSpec("01/01/1990", "valid", "accept", 0.86),
             _CandidateSpec("2099-01-01", "invalid", "reject", 0.86),
             _CandidateSpec("1990-02-30", "malformed", "reject", 0.91),
         ],
         "date": [
             _CandidateSpec("2024-12-31", "valid", "accept", 0.9),
-            _CandidateSpec("12/31/2024", "valid", "accept", 0.82),
             _CandidateSpec("31-12-2024", "boundary", "reject", 0.78),
             _CandidateSpec("2024-13-40", "malformed", "reject", 0.9),
         ],
@@ -120,7 +231,6 @@ def _semantic_specs(semantic_type: str) -> list[_CandidateSpec]:
         "account_number": [
             _CandidateSpec("ACCT12345678", "valid", "accept", 0.92),
             _CandidateSpec("1234", "boundary", "reject", 0.86),
-            _CandidateSpec("ACCT-12-##", "malformed", "reject", 0.9),
         ],
         "postal_code": [
             _CandidateSpec("90210", "valid", "accept", 0.9),
@@ -130,33 +240,27 @@ def _semantic_specs(semantic_type: str) -> list[_CandidateSpec]:
         ],
         "address": [
             _CandidateSpec("221B Baker Street", "valid", "accept", 0.88),
-            _CandidateSpec("A", "boundary", "reject", 0.8),
             _CandidateSpec("### !!!", "malformed", "reject", 0.82),
         ],
         "city": [
             _CandidateSpec("San Francisco", "valid", "accept", 0.86),
-            _CandidateSpec("X", "boundary", "reject", 0.8),
             _CandidateSpec("1234", "malformed", "reject", 0.82),
         ],
         "state": [
             _CandidateSpec("CA", "valid", "accept", 0.84),
-            _CandidateSpec("California", "valid", "accept", 0.82),
             _CandidateSpec("C4", "malformed", "reject", 0.8),
         ],
         "amount": [
             _CandidateSpec(100.5, "valid", "accept", 0.9),
             _CandidateSpec(-1, "boundary", "reject", 0.87),
-            _CandidateSpec("1,00.00.00", "malformed", "reject", 0.84),
         ],
         "select_option": [
             _CandidateSpec("option_1", "valid", "accept", 0.8),
-            _CandidateSpec("", "empty", "reject", 0.88),
             _CandidateSpec("invalid_option", "invalid", "reject", 0.82),
         ],
         "boolean_choice": [
             _CandidateSpec(True, "valid", "accept", 0.82),
             _CandidateSpec(False, "valid", "accept", 0.82),
-            _CandidateSpec("", "empty", "reject", 0.84),
         ],
         "email": [
             _CandidateSpec("user@example.com", "valid", "accept", 0.94),
@@ -168,77 +272,51 @@ def _semantic_specs(semantic_type: str) -> list[_CandidateSpec]:
             _CandidateSpec("A1ice", "malformed", "reject", 0.76),
         ],
         "generic_text": [
-            _CandidateSpec("sample", "valid", "accept", 0.78),
-            _CandidateSpec("<script>alert(1)</script>", "suspicious", "reject", 0.91),
+            _CandidateSpec("sample text", "valid", "accept", 0.78),
         ],
         "free_text": [
             _CandidateSpec("This is a user-entered comment.", "valid", "accept", 0.82),
-            _CandidateSpec("x", "boundary", "reject", 0.76),
-            _CandidateSpec("<img src=x onerror=alert(1)>", "suspicious", "reject", 0.9),
         ],
     }
     return list(catalog.get(semantic_type, catalog["generic_text"]))
 
 
-def _regex_specs(pattern: str | None) -> list[_CandidateSpec]:
-    if not pattern:
-        return []
+def _structural_length_specs(profile: ConstraintProfile) -> list[_CandidateSpec]:
+    """Use the ConstraintProfile's segments and length to generate structural tests."""
+    specs: list[_CandidateSpec] = []
+    
+    # Extract dominant charset from the first segment if single-segment
+    # (For complex multi-segment we rely on semantic catalog + future combinatorics)
+    digits_only = False
+    if profile.is_single_segment():
+        seg = profile.segment_model.segments[0]
+        charsets = [c for c in seg.constraints if c.type == "charset"]
+        if charsets and charsets[0].category == CharsetCategory.NUMERIC:
+            digits_only = True
+            
+    min_len = profile.total_min_length()
+    max_len = profile.total_max_length()
+    
+    value_factory = _digits if digits_only else _letters
 
-    exact_digits = re.fullmatch(r"(?:\[0-9\]|\\d)\{(?P<size>\d+)\}", pattern)
-    if exact_digits:
-        size = int(exact_digits.group("size"))
-        return [
-            _CandidateSpec(_digits(size), "valid", "accept", 0.94),
-            _CandidateSpec(_digits(max(size - 1, 0)), "boundary", "reject", 0.9),
-            _CandidateSpec(_digits(size + 1), "boundary", "reject", 0.9),
-            _CandidateSpec(f"{_digits(max(size - 1, 1))}A", "malformed", "reject", 0.88),
-        ]
-
-    digit_range = re.fullmatch(
-        r"(?:\[0-9\]|\\d)\{(?P<min_size>\d+),(?P<max_size>\d+)\}",
-        pattern,
-    )
-    if digit_range:
-        min_size = int(digit_range.group("min_size"))
-        max_size = int(digit_range.group("max_size"))
-        specs = _range_length_specs(min_size, max_size, digits_only=True)
-        specs.append(_CandidateSpec("12AB", "malformed", "reject", 0.88))
-        return specs
-
-    alnum_range = re.fullmatch(
-        r"\[A-Za-z0-9\]\{(?P<min_size>\d+),(?P<max_size>\d+)\}",
-        pattern,
-    )
-    if alnum_range:
-        min_size = int(alnum_range.group("min_size"))
-        max_size = int(alnum_range.group("max_size"))
-        specs = _range_length_specs(min_size, max_size, digits_only=False)
-        specs.append(_CandidateSpec("###$$$", "malformed", "reject", 0.88))
-        return specs
-
-    return [_CandidateSpec("not-matching-pattern", "malformed", "reject", 0.76)]
+    # Valid boundary points
+    if max_len < 500: # Don't test valid upper bound if it's implicitly 500
+        specs.append(_CandidateSpec(value_factory(max_len), "boundary", "accept", 0.86))
+        
+    if min_len > 0:
+        specs.append(_CandidateSpec(value_factory(min_len), "boundary", "accept", 0.84))
+        
+    # Invalid boundary points
+    if max_len < 500:
+        specs.append(_CandidateSpec(value_factory(max_len + 1), "boundary", "reject", 0.9))
+        
+    if min_len > 1:
+        specs.append(_CandidateSpec(value_factory(min_len - 1), "boundary", "reject", 0.88))
+        
+    return specs
 
 
-def _length_specs(field: FieldSchema) -> list[_CandidateSpec]:
-    if field.min_length is not None and field.max_length is not None:
-        return _range_length_specs(field.min_length, field.max_length, digits_only=False)
-    if field.max_length is not None:
-        max_size = field.max_length
-        return [
-            _CandidateSpec(_letters(max(max_size - 1, 0)), "boundary", "accept", 0.82),
-            _CandidateSpec(_letters(max_size), "boundary", "accept", 0.86),
-            _CandidateSpec(_letters(max_size + 1), "boundary", "reject", 0.9),
-        ]
-    if field.min_length is not None:
-        min_size = field.min_length
-        return [
-            _CandidateSpec(_letters(max(min_size - 1, 0)), "boundary", "reject", 0.88),
-            _CandidateSpec(_letters(min_size), "boundary", "accept", 0.84),
-        ]
-    return []
-
-
-def _numeric_specs(field: FieldSchema) -> list[_CandidateSpec]:
+def _numeric_bounds_specs(field: FieldSchema) -> list[_CandidateSpec]:
     if field.type != "number" and field.min_val is None and field.max_val is None:
         return []
 
@@ -253,20 +331,14 @@ def _numeric_specs(field: FieldSchema) -> list[_CandidateSpec]:
     return specs
 
 
-def _date_specs(
-    field: FieldSchema,
-    semantic_type: str,
-    likely_format: str,
-) -> list[_CandidateSpec]:
-    if field.type != "date" and semantic_type != "date_of_birth" and "date" not in likely_format.lower():
+def _date_specs(field: FieldSchema, semantic_type: str) -> list[_CandidateSpec]:
+    if field.type != "date" and semantic_type not in ("date", "date_of_birth"):
         return []
 
     today = date.today().isoformat()
     return [
         _CandidateSpec("1990-01-01", "valid", "accept", 0.95),
-        _CandidateSpec("01/01/1990", "valid", "accept", 0.86),
-        _CandidateSpec(today, "boundary", "reject", 0.88),
-        _CandidateSpec("2099-01-01", "invalid", "reject", 0.86),
+        _CandidateSpec(today, "boundary", "reject" if semantic_type == "date_of_birth" else "accept", 0.88),
         _CandidateSpec("1990-02-30", "malformed", "reject", 0.91),
     ]
 
@@ -285,54 +357,8 @@ def _security_specs() -> list[_CandidateSpec]:
     return [
         _CandidateSpec(SECURITY_PAYLOAD, "suspicious", "reject", 0.92),
         _CandidateSpec("<script>alert(1)</script>", "suspicious", "reject", 0.91),
+        _CandidateSpec("../../../../etc/passwd", "suspicious", "reject", 0.85),
     ]
-
-
-def _structured_identifier_specs(likely_format: str) -> list[_CandidateSpec]:
-    if likely_format.startswith("pan-india"):
-        return [
-            _CandidateSpec("ABCDE1234F", "valid", "accept", 0.94),
-            _CandidateSpec("ABCD12345F", "malformed", "reject", 0.9),
-        ]
-    if likely_format.startswith("ssn-us"):
-        return [
-            _CandidateSpec("123-45-6789", "valid", "accept", 0.92),
-            _CandidateSpec("12-345-6789", "malformed", "reject", 0.9),
-        ]
-    if likely_format.startswith("aadhaar-india"):
-        return [
-            _CandidateSpec("1234 5678 9012", "valid", "accept", 0.92),
-            _CandidateSpec("12345 678 9012", "malformed", "reject", 0.9),
-        ]
-    if likely_format.startswith("ifsc-india"):
-        return [
-            _CandidateSpec("HDFC0001234", "valid", "accept", 0.92),
-            _CandidateSpec("HDF00001234", "malformed", "reject", 0.9),
-        ]
-    if likely_format.startswith("zip-us"):
-        return [
-            _CandidateSpec("12345", "valid", "accept", 0.9),
-            _CandidateSpec("12345-6789", "valid", "accept", 0.86),
-            _CandidateSpec("1234", "boundary", "reject", 0.88),
-        ]
-    return []
-
-
-def _range_length_specs(
-    min_size: int,
-    max_size: int,
-    *,
-    digits_only: bool,
-) -> list[_CandidateSpec]:
-    value_factory = _digits if digits_only else _alnum
-    specs = [
-        _CandidateSpec(value_factory(min_size), "boundary", "accept", 0.86),
-        _CandidateSpec(value_factory(max_size), "boundary", "accept", 0.86),
-    ]
-    if min_size > 0:
-        specs.append(_CandidateSpec(value_factory(min_size - 1), "boundary", "reject", 0.9))
-    specs.append(_CandidateSpec(value_factory(max_size + 1), "boundary", "reject", 0.9))
-    return specs
 
 
 def _dedupe_specs(specs: Sequence[_CandidateSpec]) -> list[_CandidateSpec]:
@@ -361,8 +387,9 @@ def _bounded_specs(specs: Sequence[_CandidateSpec]) -> list[_CandidateSpec]:
     )
     selected: list[_CandidateSpec] = []
     used: set[tuple[str, str]] = set()
-    coverage_categories = ["valid", "boundary", "malformed", "suspicious", "empty", "whitespace"]
+    coverage_categories = ["valid", "boundary", "malformed", "suspicious", "empty", "whitespace", "invalid"]
 
+    # Ensure representation from each critical category
     for category in coverage_categories:
         for item in ranked:
             key = (str(item.input_value), item.category)
@@ -372,6 +399,7 @@ def _bounded_specs(specs: Sequence[_CandidateSpec]) -> list[_CandidateSpec]:
             used.add(key)
             break
 
+    # Fill the rest ordered by rank
     for item in ranked:
         if len(selected) >= MAX_CANDIDATES_PER_FIELD:
             break
@@ -396,68 +424,6 @@ def _priority_for(field: FieldSchema, confidence: float, spec: _CandidateSpec) -
     }.get(spec.category, 0.0)
     score = (confidence * 0.45) + (spec.weight * 0.45) + category_boost
     return round(min(max(score, 0.0), 1.0), 4)
-
-
-def _fallback_semantic_type(field: FieldSchema) -> str:
-    haystack = (
-        f"{field.name} {field.label or ''} {field.dom_id or ''} "
-        f"{field.placeholder or ''} {field.context_text or ''}"
-    ).lower()
-    if field.type == "select":
-        return "select_option"
-    if field.type in {"checkbox", "radio"}:
-        return "boolean_choice"
-    if field.type == "email" or "email" in haystack:
-        return "email"
-    if field.type == "tel" or "mobile" in haystack or "phone" in haystack or "contact" in haystack:
-        return "mobile_number"
-    if "address" in haystack or "street" in haystack:
-        return "address"
-    if "city" in haystack:
-        return "city"
-    if "state" in haystack or "province" in haystack:
-        return "state"
-    if "zip" in haystack or "postal" in haystack or "pincode" in haystack:
-        return "postal_code"
-    if "amount" in haystack or "price" in haystack or "currency" in haystack:
-        return "amount"
-    if ("loan" in haystack and "account" in haystack) or "lan" in haystack:
-        return "loan_account_number"
-    if "account" in haystack and ("number" in haystack or "id" in haystack):
-        return "account_number"
-    if "dob" in haystack or ("date" in haystack and "birth" in haystack):
-        return "date_of_birth"
-    if field.type == "date" or "date" in haystack:
-        return "date"
-    if "application" in haystack or "reference" in haystack:
-        return "application_reference_number"
-    if "name" in haystack:
-        return "name"
-    if field.type == "textarea" or "comment" in haystack or "message" in haystack:
-        return "free_text"
-    return "generic_text"
-
-
-def _fallback_confidence(semantic_type: str) -> float:
-    return {
-        "phone": 0.78,
-        "mobile_number": 0.78,
-        "loan_account_number": 0.76,
-        "account_number": 0.74,
-        "date_of_birth": 0.74,
-        "date": 0.7,
-        "postal_code": 0.74,
-        "address": 0.68,
-        "city": 0.68,
-        "state": 0.66,
-        "amount": 0.72,
-        "select_option": 0.68,
-        "boolean_choice": 0.66,
-        "free_text": 0.6,
-        "application_reference_number": 0.72,
-        "email": 0.7,
-        "name": 0.58,
-    }.get(semantic_type, 0.45)
 
 
 def _generic_valid_value(field: FieldSchema) -> CandidateValue:
