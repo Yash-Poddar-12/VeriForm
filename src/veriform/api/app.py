@@ -14,14 +14,35 @@ from fastapi import FastAPI
 from veriform.api.routes import runs
 from veriform.executor.queue_manager import task_queue, TaskPayload
 from veriform.services.services import ExecutionService
-from veriform.orchestrator.orchestrator import run
-
 async def _execute_task(payload: TaskPayload) -> None:
+    from pathlib import Path
+    from playwright.async_api import async_playwright
+    from veriform.orchestrator.pipeline import PipelineOrchestrator
+    from veriform.schemas.mutations import MutationProfile
+
     svc = ExecutionService()
     await svc.update_status(payload.run_id, "running")
-    # Actually run the workflow
-    await run(payload.target_url)
-    await svc.update_status(payload.run_id, "completed")
+    
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
+            
+            orchestrator = PipelineOrchestrator(
+                page=page,
+                run_id=payload.run_id,
+                profile=MutationProfile.LIGHTWEIGHT
+            )
+            
+            output_dir = Path("reports")
+            await orchestrator.run(payload.target_url, output_dir)
+            await browser.close()
+            
+        await svc.update_status(payload.run_id, "completed")
+    except Exception as e:
+        await svc.update_status(payload.run_id, "failed")
+        raise e
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

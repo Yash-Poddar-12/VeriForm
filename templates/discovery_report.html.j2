@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeriForm Validation Discovery Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-surface: #1e293b;
+            --bg-surface-hover: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        /* Layout */
+        .header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-logo {
+            color: var(--accent);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Executive Summary */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .stat-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.5rem;
+        }
+
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            background: var(--bg-surface);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--accent);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-base);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .btn-primary:hover {
+            background: #7dd3fc;
+        }
+
+        /* Field Cards */
+        .field-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .field-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .field-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .field-header:hover {
+            background: var(--bg-surface-hover);
+        }
+
+        .field-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .field-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Badges */
+        .badges {
+            display: flex;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-required { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid #ef4444; }
+        .badge-optional { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid #94a3b8; }
+        .badge-semantic { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; border: 1px solid #38bdf8; }
+        .badge-high-conf { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid #10b981; }
+        .badge-low-conf { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid #f59e0b; }
+
+        /* Field Body */
+        .field-body {
+            padding: 1.5rem;
+            display: none;
+        }
+        
+        .field-card.open .field-body {
+            display: block;
+        }
+
+        /* Regex Block */
+        .regex-block {
+            background: #000;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border);
+        }
+
+        .regex-pattern {
+            color: #a78bfa;
+            font-size: 1.1rem;
+            word-break: break-all;
+        }
+        
+        .regex-explanation {
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        /* Examples Grid */
+        .examples-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .example-list {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .example-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .accepted .example-title { color: var(--success); }
+        .rejected .example-title { color: var(--danger); }
+
+        .code-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .code-list li {
+            font-family: 'JetBrains Mono', monospace;
+            padding: 4px 8px;
+            margin-bottom: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #cbd5e1;
+        }
+
+        /* Evidence Traces */
+        .evidence-section {
+            margin-top: 2rem;
+            border-top: 1px solid var(--border);
+            padding-top: 1.5rem;
+        }
+
+        .evidence-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+        }
+
+        .evidence-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        
+        .evidence-bullet {
+            color: var(--accent);
+            margin-top: 2px;
+        }
+
+        .warning-text {
+            color: var(--warning);
+        }
+    </style>
+    <script>
+        function toggleField(id) {
+            document.getElementById(id).classList.toggle('open');
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard');
+            });
+        }
+    </script>
+</head>
+<body>
+
+<header class="header">
+    <h1>
+        <svg class="header-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+        VeriForm Validation Discovery
+    </h1>
+    <div class="run-meta">
+        <span style="color: var(--text-muted); margin-right: 15px;">Target:</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{{ target_url }}</span>
+    </div>
+</header>
+
+<main class="container">
+    
+    <div class="action-bar">
+        <a href="openapi.json" class="btn btn-primary" download>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            OpenAPI Spec
+        </a>
+        <a href="inferred_schema.json" class="btn" download>JSON Schema</a>
+        <a href="validation_contract.json" class="btn" download>Validation Contract</a>
+        <a href="raw_probe_results.json" class="btn" download>Raw Probe Trace</a>
+    </div>
+
+    <div class="summary-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ metrics.total_fields }}</div>
+            <div class="stat-label">Fields Detected</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ metrics.processed_fields }}</div>
+            <div class="stat-label">Contracts Synthesized</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ "%.1f"|format(metrics.avg_confidence * 100) }}%</div>
+            <div class="stat-label">Avg Schema Confidence</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ metrics.total_probes_executed }}</div>
+            <div class="stat-label">Behavioral Probes Injected</div>
+        </div>
+    </div>
+
+    <div class="field-list">
+        {% for field in fields %}
+        <div class="field-card" id="field-{{ field.field_id }}">
+            <div class="field-header" onclick="toggleField('field-{{ field.field_id }}')">
+                <div class="field-title">
+                    <span class="field-name">{{ field.name }}</span>
+                    <div class="badges">
+                        {% if field.required %}
+                        <span class="badge badge-required">Required</span>
+                        {% else %}
+                        <span class="badge badge-optional">Optional</span>
+                        {% endif %}
+                        
+                        {% if field.semantic_type %}
+                        <span class="badge badge-semantic">{{ field.semantic_type }}</span>
+                        {% endif %}
+                        
+                        {% if field.synthesized_regex %}
+                            {% if field.synthesized_regex.confidence >= 0.8 %}
+                            <span class="badge badge-high-conf">High Confidence ({{ "%.0f"|format(field.synthesized_regex.confidence * 100) }}%)</span>
+                            {% else %}
+                            <span class="badge badge-low-conf">Low Confidence ({{ "%.0f"|format(field.synthesized_regex.confidence * 100) }}%)</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted)">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+            
+            <div class="field-body">
+                {% if field.synthesized_regex %}
+                
+                <p class="regex-explanation">{{ field.synthesized_regex.description }}</p>
+                
+                <div class="regex-block">
+                    <span class="regex-pattern">{{ field.synthesized_regex.regex }}</span>
+                    <button class="btn" onclick="copyToClipboard('{{ field.synthesized_regex.regex|replace('\\', '\\\\') }}')">Copy</button>
+                </div>
+                
+                <div class="examples-grid">
+                    <div class="example-list accepted">
+                        <div class="example-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            Accepted Examples
+                        </div>
+                        <ul class="code-list">
+                            {% for ex in field.synthesized_regex.accepted_examples %}
+                            <li>{{ ex }}</li>
+                            {% else %}
+                            <li style="opacity: 0.5">None inferred</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    
+                    <div class="example-list rejected">
+                        <div class="example-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            Rejected Examples
+                        </div>
+                        <ul class="code-list">
+                            {% for ex in field.synthesized_regex.rejected_examples %}
+                            <li>{{ ex }}</li>
+                            {% else %}
+                            <li style="opacity: 0.5">None inferred</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="evidence-section">
+                    <div class="evidence-title">Explainability Trace</div>
+                    {% for ev in field.synthesized_regex.evidence %}
+                    <div class="evidence-item">
+                        <svg class="evidence-bullet" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        <span class="{% if ev.startswith('WARNING') %}warning-text{% endif %}">{{ ev }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% else %}
+                <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                    No contract synthesized for this field.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</main>
+
+</body>
+</html>

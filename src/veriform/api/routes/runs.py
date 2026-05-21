@@ -121,19 +121,38 @@ async def get_run_healing_logs(run_id: str) -> List[Dict[str, Any]]:
         }
     ]
 
-@router.get("/{run_id}/semantic-states")
-async def get_semantic_states(run_id: str):
-    return {"status": "mocked", "run_id": run_id, "data": []}
+@router.get("/{run_id}/contract")
+async def get_validation_contract(run_id: str):
+    import json
+    from pathlib import Path
+    path = Path(f"reports/{run_id}/validation_contract.json")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Contract not found or run still in progress")
+    return json.loads(path.read_text())
 
-@router.get("/{run_id}/ai-decisions")
-async def get_ai_decisions(run_id: str):
-    return {"status": "mocked", "run_id": run_id, "data": []}
+@router.get("/{run_id}/schema")
+async def get_inferred_schema(run_id: str):
+    import json
+    from pathlib import Path
+    path = Path(f"reports/{run_id}/inferred_schema.json")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Schema not found")
+    return json.loads(path.read_text())
 
-@router.get("/{run_id}/visual-diffs")
-async def get_visual_diffs(run_id: str):
-    return {"status": "mocked", "run_id": run_id, "data": []}
+@router.get("/{run_id}/openapi")
+async def get_openapi_spec(run_id: str):
+    import json
+    from pathlib import Path
+    path = Path(f"reports/{run_id}/openapi.json")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="OpenAPI spec not found")
+    return json.loads(path.read_text())
 
-@router.get("/{run_id}/replay-optimizations")
-async def get_replay_optimizations(run_id: str):
-    return {"status": "mocked", "run_id": run_id, "data": []}
-
+@router.get("/{run_id}/report")
+async def get_html_report(run_id: str):
+    from fastapi.responses import HTMLResponse
+    from pathlib import Path
+    path = Path(f"reports/{run_id}/report.html")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Report not found")
+    return HTMLResponse(content=path.read_text(encoding="utf-8"), status_code=200)

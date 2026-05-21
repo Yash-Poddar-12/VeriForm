@@ -157,3 +157,11 @@ class PipelineOrchestrator:
         oa_exporter = OpenApiExporter()
         oa_schema = oa_exporter.export(artifact.validation_contract)
         (run_dir / "openapi.json").write_text(json.dumps(oa_schema, indent=2))
+        
+        # HTML Report Export
+        try:
+            from veriform.exporters.html_exporter import HtmlExporter
+            html_exporter = HtmlExporter()
+            html_exporter.export(artifact, run_dir / "report.html")
+        except Exception as e:
+            logger.error(f"Failed to export HTML report: {e}")
