@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head><title>Delayed Redirect Trap</title></head>
+<body>
+    <h1>Delayed Redirect Trap</h1>
+    <p>Simulates success by waiting 3 seconds before navigating away.</p>
+    <input type="text" id="email" />
+    <button id="btn">Submit</button>
+    <script>
+        document.getElementById('btn').addEventListener('click', () => {
+            const email = document.getElementById('email').value;
+            if (email.includes('@')) {
+                // Success: Redirect delayed
+                setTimeout(() => {
+                    window.location.hash = "#success";
+                }, 3000);
+            } else {
+                // Inline failure
+                document.getElementById('btn').innerText = "Failed";
+            }
+        });
+    </script>
+</body>
+</html>

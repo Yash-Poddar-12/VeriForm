@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>ARIA Validation Trap</title></head>
+<body>
+    <h1>ARIA Hidden Validation Trap</h1>
+    <p>Displays no visible UI errors, only updates aria-invalid tag.</p>
+    
+    <label for="pan">PAN:</label>
+    <input type="text" id="pan" aria-invalid="false" aria-errormessage="pan-error" />
+    <span id="pan-error" style="visibility: hidden;">Invalid PAN Format</span>
+    <button id="btn">Submit</button>
+    <script>
+        document.getElementById('btn').addEventListener('click', () => {
+            const pan = document.getElementById('pan').value;
+            if (pan.length !== 10) {
+                document.getElementById('pan').setAttribute('aria-invalid', 'true');
+            } else {
+                document.getElementById('pan').setAttribute('aria-invalid', 'false');
+            }
+        });
+    </script>
+</body>
+</html>

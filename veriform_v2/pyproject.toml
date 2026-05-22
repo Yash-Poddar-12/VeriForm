@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "veriform"
+version = "2.0.0"
+dependencies = [
+    "playwright",
+    "pydantic",
+    "fastapi",
+    "uvicorn",
+    "pytest"
+]
+
+[tool.setuptools.packages.find]
+where = ["packages"]
+
+[project.scripts]
+veriform-baseline = "veriform_runner.run_baseline:main"
+veriform-mutation = "veriform_runner.run_mutation:main"
+veriform-benchmark = "veriform_runner.run_benchmark_suite:main"

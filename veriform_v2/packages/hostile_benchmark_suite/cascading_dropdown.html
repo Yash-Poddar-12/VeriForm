@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Cascading Trap</title></head>
+<body>
+    <h1>Cascading Dropdown Dependency Reset</h1>
+    <label for="country">Country:</label>
+    <select id="country">
+        <option value="">Select</option>
+        <option value="US">US</option>
+        <option value="IN">IN</option>
+    </select>
+    <br/><br/>
+    <label for="state">State:</label>
+    <select id="state" disabled>
+        <option value="">Select</option>
+    </select>
+    <script>
+        document.getElementById('country').addEventListener('change', (e) => {
+            const state = document.getElementById('state');
+            state.disabled = !e.target.value;
+            state.value = ""; // Modifying country resets dependent field, causing dependency invalidation!
+        });
+    </script>
+</body>
+</html>

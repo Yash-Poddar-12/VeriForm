@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generic Toast Trap</title>
+    <style>
+        .toast { display: none; background: red; color: white; padding: 10px; margin-bottom: 10px; }
+        .visible { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Generic Toast Trap</h1>
+    <div id="toast-container" class="toast">Something went wrong. Check inputs.</div>
+    
+    <label for="email">Email:</label>
+    <input type="text" id="email" />
+    <label for="phone">Phone:</label>
+    <input type="text" id="phone" />
+    <button type="submit" id="btn">Submit</button>
+
+    <script>
+        document.getElementById('btn').addEventListener('click', () => {
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+            const toast = document.getElementById('toast-container');
+            
+            // Artificial delay to trap race conditions
+            setTimeout(() => {
+                if (!email.includes('@') || phone.length !== 10) {
+                    toast.classList.add('visible');
+                } else {
+                    toast.classList.remove('visible');
+                    toast.innerText = 'Success!';
+                    toast.style.background = 'green';
+                    toast.classList.add('visible');
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

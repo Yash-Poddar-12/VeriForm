@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>State Corruption Trap</title>
+    <style>
+        .error { color: red; display: none; }
+        .visible { display: inline; }
+    </style>
+</head>
+<body>
+    <h1>State Corruption Trap</h1>
+    <p>Once you enter an invalid PAN, the phone field is permanently disabled until reload.</p>
+    
+    <label for="pan">PAN:</label>
+    <input type="text" id="pan" />
+    <span id="pan-error" class="error">Invalid PAN</span>
+    
+    <br/><br/>
+    <label for="phone">Phone:</label>
+    <input type="text" id="phone" />
+    
+    <button type="submit" id="btn">Submit</button>
+
+    <script>
+        document.getElementById('pan').addEventListener('blur', (e) => {
+            if (e.target.value.length > 0 && e.target.value.length !== 10) {
+                document.getElementById('pan-error').classList.add('visible');
+                // Corrupt state
+                document.getElementById('phone').disabled = true;
+                document.getElementById('phone').value = "DISABLED";
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+[
+  {
+    "mutated_field": "pan",
+    "candidate_value": "12345ABCDE",
+    "baseline_hash": "f702474c63cd2ad4d37e509e58017a5699a1e8c38bc0a1570df48d6bda50d099",
+    "delta": {
+      "dom_errors": [],
+      "network_errors": []
+    },
+    "attribution": {
+      "mutated_field": "pan",
+      "exact_match": false,
+      "solitary_mutation": false,
+      "inferred_errors": [],
+      "confidence": 0.0
+    },
+    "confidence_score": 0.0,
+    "evidence_hash": "f4edfc9e6254176203f38d91a997df93e4e136906a766ff5c88083a9990d3f7c"
+  },
+  {
+    "mutated_field": "pan",
+    "candidate_value": "ABCDE1234",
+    "baseline_hash": "f702474c63cd2ad4d37e509e58017a5699a1e8c38bc0a1570df48d6bda50d099",
+    "delta": {
+      "dom_errors": [],
+      "network_errors": []
+    },
+    "attribution": {
+      "mutated_field": "pan",
+      "exact_match": false,
+      "solitary_mutation": false,
+      "inferred_errors": [],
+      "confidence": 0.0
+    },
+    "confidence_score": 0.0,
+    "evidence_hash": "7a4b973093d4b038b4d002f343b5e468266c292880480c682249b67521d40aba"
+  },
+  {
+    "mutated_field": "pan",
+    "candidate_value": "ABCDE1234F",
+    "baseline_hash": "f702474c63cd2ad4d37e509e58017a5699a1e8c38bc0a1570df48d6bda50d099",
+    "delta": {
+      "dom_errors": [],
+      "network_errors": []
+    },
+    "attribution": {
+      "mutated_field": "pan",
+      "exact_match": false,
+      "solitary_mutation": false,
+      "inferred_errors": [],
+      "confidence": 0.0
+    },
+    "confidence_score": 0.0,
+    "evidence_hash": "e2a6ad3217bbcb2b82e20de4faaaa172370b44a0168a9f3c4cf2c71cf68698af"
+  },
+  {
+    "mutated_field": "pan",
+    "candidate_value": "ABCDE1234FG",
+    "baseline_hash": "f702474c63cd2ad4d37e509e58017a5699a1e8c38bc0a1570df48d6bda50d099",
+    "delta": {
+      "dom_errors": [],
+      "network_errors": []
+    },
+    "attribution": {
+      "mutated_field": "pan",
+      "exact_match": false,
+      "solitary_mutation": false,
+      "inferred_errors": [],
+      "confidence": 0.0
+    },
+    "confidence_score": 0.0,
+    "evidence_hash": "3dabcb1c6614ccc8345ed0ca347c169817db937cb362b53c94a31da9a9bf67b8"
+  }
+]

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head><title>Optimistic UI Trap</title></head>
+<body>
+    <h1>Optimistic UI Trap</h1>
+    <p>Displays success immediately, but network fails silently in background.</p>
+    <div id="toast" style="display:none; color:green;">Success!</div>
+    <label for="pan">PAN:</label>
+    <input type="text" id="pan" />
+    <button id="btn" type="submit">Submit</button>
+    <script>
+        document.getElementById('btn').addEventListener('click', () => {
+            document.getElementById('toast').style.display = 'block'; // False positive UI signal
+            const pan = document.getElementById('pan').value;
+            // Background validation — use relative path so it works on any port
+            setTimeout(() => {
+                if (pan.length !== 10) {
+                    fetch('/trigger_400'); // Relative URL — resolves to server origin automatically
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

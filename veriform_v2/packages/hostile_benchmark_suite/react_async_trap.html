@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>React Async Trap</title>
+    <style>
+        .error { color: red; display: none; }
+        .error.visible { display: block; }
+    </style>
+</head>
+<body>
+    <h1>React Async Validation Trap</h1>
+    <p>Simulates a field that delays validation by 2000ms after blur, using simulated network latency.</p>
+    
+    <div id="root">
+        <label for="email">Email Address:</label>
+        <input type="text" id="email" />
+        <span id="email-error" class="error">Invalid email format (Server validated).</span>
+    </div>
+
+    <script>
+        // Simulate hostile async behavior
+        const input = document.getElementById('email');
+        const errorSpan = document.getElementById('email-error');
+        
+        input.addEventListener('blur', () => {
+            console.log("Blur detected, starting async validation...");
+            
+            // Simulate a network request using a dummy fetch
+            fetch('data:application/json,{"status":"validating"}')
+                .then(() => new Promise(resolve => setTimeout(resolve, 2000))) // Artificial latency
+                .then(() => {
+                    if (!input.value.includes('@valid.com')) {
+                        errorSpan.classList.add('visible');
+                    } else {
+                        errorSpan.classList.remove('visible');
+                    }
+                });
+        });
+    </script>
+</body>
+</html>
